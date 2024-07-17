@@ -1,5 +1,5 @@
-# LAN Chess Game
-This project allows for multiple to play chess over a local area network. It is built in Python using the socket and threading modules, which let many games run concurrently.
+# Chess Game
+This project allows for multiple people to play chess using a client-server model. It is built in Python using the socket and threading modules, which allow for many games to run concurrently.
 
 
 Features
