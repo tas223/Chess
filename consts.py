@@ -1,3 +1,8 @@
+"""
+  Specifies constants for board and message screens. 
+  These values can be modified to change the displayed colors and board sizing.
+"""
+
 WIDTH, HEIGHT = 800, 800
 
 ROWS, COLS = 8, 8
