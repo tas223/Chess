@@ -7,6 +7,8 @@ from consts import *
 
 
 class Board:
+    """ A class that manages the chess board state and game conditions """
+
     def __init__(self, client, player, screen):
         self.screen = screen
         self.board = [[0]*COLS for _ in range(ROWS)]
@@ -25,6 +27,7 @@ class Board:
         self.restartPieces()
 
     def createBoard(self):
+        # creates appearance of chess board on pygame screen
         for row in range(ROWS):
             for col in range(COLS):
                 color = COLOR_OPTIONS[0] if (
@@ -34,6 +37,7 @@ class Board:
                 pygame.draw.rect(self.screen, color, square)
 
     def showPieces(self):
+        # displays each piece centered on the square it is located at
         for row in range(ROWS):
             for col in range(COLS):
                 piece = self.board[row][col]
@@ -43,6 +47,7 @@ class Board:
                         piece.png(), (offset + col * SQUARE_SIZE, offset + row * SQUARE_SIZE))
 
     def restartPieces(self):
+        # used to initialize board pieces when game starts
         whitePieces = [Rook(1), Knight(1), Bishop(1), Queen(
             1), King(1), Bishop(1), Knight(1), Rook(1)]
         blackPieces = [Rook(0), Knight(0), Bishop(0), Queen(
@@ -54,6 +59,7 @@ class Board:
             self.board[7][col] = blackPieces[col]
 
     def showMoves(self):
+        # change background color for squares that selected piece can move to
         if self.movingPiece:
             for row, col in self.movingPiece.findMoves(self.board, self.initialRow, self.initialCol, self.lastMove):
                 color = COLOR_OPTIONS[2] if (
@@ -63,6 +69,7 @@ class Board:
                 pygame.draw.rect(self.screen, color, square)
 
     def showLastMove(self):
+        # change background color for starting and ending positions from last move
         for row, col in self.lastMove:
             color = COLOR_OPTIONS[6] if (
                 row + col) % 2 == 0 else COLOR_OPTIONS[7]
@@ -71,6 +78,7 @@ class Board:
             pygame.draw.rect(self.screen, color, square)
 
     def castle(self, row, col):
+        # change board state if user castled
         if col < self.initialCol:
             self.board[row][3] = self.board[row][0]
             self.board[row][0] = 0
@@ -84,21 +92,29 @@ class Board:
         return self.player == self.currentUser
 
     def updateBoard(self, moves):
+        """ Handle board state given opponent's move. Length of moves signals different tasks for method to account for.
+            Game end is determined here, and it sets self.end to close the thread and end game.
+
+        Args:
+            moves (list[tuple]): A list with coordinates from opponent's move
+        """
         if len(moves) < 1:  # because send/receive methods are not blocking
             return
-        if len(moves) == 1:  # you won or opponent disconnected
+        if len(moves) == 1:  # you won or opponent disconnected, message is 0 by default
             if moves[0][0] == 0:
-                self.message = 1
+                self.message = 1  # if you won change message to 1
             self.end.set()
             return
 
+        # change board state to reflect opponent's move
         self.lastMove = moves
         row, col = moves[0]
         newRow, newCol = moves[1]
         self.board[newRow][newCol] = self.board[row][col]
 
         if (newRow == 0 or newRow == 7) and isinstance(self.board[newRow][newCol], Pawn):
-            self.board[newRow][newCol] = Queen(not self.player)
+            self.board[newRow][newCol] = Queen(
+                not self.player)  # pawn promotion
         self.board[row][col] = 0
         if len(moves) == 3:  # en passant
             row, col = moves[2]
@@ -109,7 +125,7 @@ class Board:
             self.board[newRow][newCol] = self.board[row][col]
             self.board[row][col] = 0
 
-        if not self.validMoves():  # you lost
+        if not self.validMoves():  # checkmate, you lost
             self.message = 2
             self.client.send([(0, 0)])
             self.end.set()
@@ -118,6 +134,11 @@ class Board:
         return self.lastMove
 
     def handleEnPassant(self):
+        """ Tests for en passant using initialRow, initialCol, and lastMove. 
+
+        Returns:
+            tuple | None: if move was en passant then returns the third coordinate to be added to lastMove 
+        """
         enPassantRow = 3 if self.player == 0 else 4
         if isinstance(self.movingPiece, Pawn) and self.initialRow == enPassantRow and len(self.lastMove) == 2:
             initialX, initialY = self.lastMove[0]
@@ -127,6 +148,12 @@ class Board:
                 return (finalX, finalY)
 
     def handleMove(self, row, col):
+        """ If user moves piece to valid square then handles moving of pieces and updates opponent
+
+        Args:
+            row (int): x-coordinate of selected piece on board
+            col (int): y-coordinate of selected piece on board
+        """
         if (row, col) in self.movingPiece.findMoves(self.board, self.initialRow, self.initialCol, self.lastMove):
             self.board[row][col] = self.movingPiece
             self.board[self.initialRow][self.initialCol] = 0
@@ -149,6 +176,11 @@ class Board:
         self.client.send(self.lastMove)
 
     def receiveOpponentData(self):
+        """
+            Runs in continuous loop until game end is set in updateBoard().
+            threadingLock is used here to prevent a new thread from creating on each turn.
+            the threading Event in self.end is needed for startGame and receiveOpponentData to end at the same time.
+        """
         while not self.end.is_set():
             with self.threadingLock:
                 data = self.client.receive()
@@ -159,6 +191,9 @@ class Board:
                     time.sleep(1)
 
     def validMoves(self):
+        """ 
+            Tests if a user is in checkmate or has valid moves left. 
+        """
         for row in range(8):
             for col in range(8):
                 if self.board[row][col] and self.board[row][col].user() == self.player:
@@ -169,6 +204,15 @@ class Board:
         return False
 
     def startGame(self):
+        """
+            Used threading because it is intended for I/O bound tasks and was faster than asyncio
+            Displays the board, pieces, last move, and valid moves for selected pieces until game ends.
+            Detects clicks on pieces and handles dragging/setting down of pieces. 
+            Handles closing of client socket and thread before returning.
+
+        Returns:
+            int: Tells main.py why the game ended
+        """
         self.receiveThread = threading.Thread(target=self.receiveOpponentData)
         self.receiveThread.daemon = True
         self.receiveThread.start()
