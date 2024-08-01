@@ -22,7 +22,6 @@ Example Game Run
 - User clicks join game button and then stays on the waiting screen until an opponent is found.
 - During the game, the last move is shown with a purple background, and a piece's valid moves are shown with a green background.
 - When the game ends, the user is told why the game ended and is then redirected back to the home screen.
-<br>
 
 <img width="400" height="400" alt="JoinGame" src="https://github.com/user-attachments/assets/63a696f8-a769-47ab-b784-673b1d8a77b8">
 <img width="400" height="400" alt="WaitingScreen" src="https://github.com/user-attachments/assets/c6e1ff7c-0c68-4869-bebc-d0ab19431db1">
